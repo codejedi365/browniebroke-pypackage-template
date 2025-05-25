@@ -81,7 +81,11 @@ jobs:
 
     runs-on: ubuntu-latest
     environment: release
-    concurrency: release
+
+    concurrency:
+      group: ${{ github.workflow }}-release-${{ github.ref_name }}
+      cancel-in-progress: false
+
     permissions:
       id-token: write
       attestations: write
@@ -90,12 +94,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
-          ref: ${{ github.sha }}
 
-      - name: Checkout commit for release
+      - name: Setup | Force release branch to be at workflow sha
         run: |
-          git checkout -B ${{ github.ref_name }} ${{ github.sha }}
+          git reset --hard ${{ github.sha }}
 
       # Do a dry run of PSR
       - name: Test release
@@ -104,6 +108,12 @@ jobs:
         with:
           no_operation_mode: true
           github_token: noop
+
+      - name: Evaluate | Verify upstream has NOT changed
+        # Last chance to abort before causing an error as another PR/push was applied to the upstream branch
+        # while this workflow was running. This is important because we are committing a version change
+        shell: bash
+        run: bash .github/workflows/verify_upstream.sh
 
       # On main branch: actual PSR + upload to PyPI & GitHub
       - name: Release
